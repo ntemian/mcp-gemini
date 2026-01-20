@@ -54,7 +54,7 @@ server.tool(
       role: z.enum(['user', 'model']),
       content: z.string(),
     })).describe('Array of messages (role: user or model)'),
-    model: z.string().optional().describe('Model: gemini-2.0-flash-exp (default), gemini-1.5-pro, gemini-1.5-flash'),
+    model: z.string().optional().describe('Model: gemini-2.5-flash (default), gemini-3-pro-preview'),
     temperature: z.number().optional().describe('Sampling temperature 0-2. Default: 1'),
     max_tokens: z.number().optional().describe('Maximum tokens to generate'),
   },
@@ -62,7 +62,7 @@ server.tool(
     try {
       const { messages, model, temperature, max_tokens } = params;
       const geminiModel = genAI.getGenerativeModel({
-        model: model || 'gemini-2.0-flash-exp',
+        model: model || 'gemini-2.5-flash',
         safetySettings,
         generationConfig: {
           temperature: temperature ?? 1,
@@ -103,14 +103,14 @@ server.tool(
   {
     prompt: z.string().describe('The prompt to send'),
     system: z.string().optional().describe('Optional system instruction'),
-    model: z.string().optional().describe('Model to use. Default: gemini-2.0-flash-exp'),
+    model: z.string().optional().describe('Model to use. Default: gemini-2.5-flash'),
     temperature: z.number().optional().describe('Temperature 0-2'),
   },
   async (params) => {
     try {
       const { prompt, system, model, temperature } = params;
       const geminiModel = genAI.getGenerativeModel({
-        model: model || 'gemini-2.0-flash-exp',
+        model: model || 'gemini-2.5-flash',
         systemInstruction: system,
         safetySettings,
         generationConfig: {
@@ -138,7 +138,7 @@ server.tool(
 
 server.tool(
   'gemini_pro',
-  'Use Gemini 1.5 Pro for complex tasks requiring deep reasoning.',
+  'Use Gemini 3 Pro for complex tasks requiring deep reasoning. Latest and best model.',
   {
     prompt: z.string().describe('The prompt'),
     system: z.string().optional().describe('Optional system instruction'),
@@ -148,7 +148,7 @@ server.tool(
     try {
       const { prompt, system, temperature } = params;
       const geminiModel = genAI.getGenerativeModel({
-        model: 'gemini-1.5-pro',
+        model: 'gemini-3-pro-preview',
         systemInstruction: system,
         safetySettings,
         generationConfig: { temperature: temperature ?? 1 },
@@ -170,7 +170,7 @@ server.tool(
 
 server.tool(
   'gemini_flash',
-  'Use Gemini Flash for fast, efficient responses.',
+  'Use Gemini 2.5 Flash for fast, efficient responses.',
   {
     prompt: z.string().describe('The prompt'),
     system: z.string().optional().describe('Optional system instruction'),
@@ -179,7 +179,7 @@ server.tool(
     try {
       const { prompt, system } = params;
       const geminiModel = genAI.getGenerativeModel({
-        model: 'gemini-1.5-flash',
+        model: 'gemini-2.5-flash',
         systemInstruction: system,
         safetySettings,
       });
@@ -221,7 +221,7 @@ server.tool(
       }
 
       const geminiModel = genAI.getGenerativeModel({
-        model: 'gemini-1.5-pro',
+        model: 'gemini-3-pro-preview',
         systemInstruction: systemPrompt,
         safetySettings,
         generationConfig: { temperature: 0.2 },
@@ -260,7 +260,7 @@ server.tool(
       };
 
       const geminiModel = genAI.getGenerativeModel({
-        model: 'gemini-1.5-pro',
+        model: 'gemini-3-pro-preview',
         systemInstruction: 'You are an expert code analyst.',
         safetySettings,
         generationConfig: { temperature: 0.3 },
@@ -303,7 +303,7 @@ server.tool(
       }
 
       const geminiModel = genAI.getGenerativeModel({
-        model: 'gemini-1.5-pro',
+        model: 'gemini-3-pro-preview',
         systemInstruction: 'Think step by step. Show your reasoning process clearly. Break down complex problems into smaller parts.',
         safetySettings,
         generationConfig: { temperature: 0.2 },
@@ -392,7 +392,7 @@ server.tool(
       };
 
       const geminiModel = genAI.getGenerativeModel({
-        model: 'gemini-1.5-flash',
+        model: 'gemini-3-pro-preview',
         safetySettings,
         generationConfig: { temperature: 0.3 },
       });
@@ -430,7 +430,7 @@ server.tool(
         : `Translate the following text to ${target_language}. Only output the translation.\n\nText: ${text}`;
 
       const geminiModel = genAI.getGenerativeModel({
-        model: 'gemini-1.5-flash',
+        model: 'gemini-3-pro-preview',
         safetySettings,
         generationConfig: { temperature: 0.3 },
       });
