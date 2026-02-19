@@ -15,6 +15,10 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { z } from 'zod';
 import { GoogleGenerativeAI, HarmCategory, HarmBlockThreshold } from '@google/generative-ai';
+import { GoogleGenAI, Scale, MusicGenerationMode } from '@google/genai';
+import * as fs from 'fs';
+import * as path from 'path';
+import * as os from 'os';
 
 // Initialize Gemini client
 const genAI = new GoogleGenerativeAI(process.env.GOOGLE_AI_API_KEY || '');
@@ -443,6 +447,200 @@ server.tool(
       const err = error as { message: string };
       return {
         content: [{ type: 'text' as const, text: `Gemini error: ${err.message}` }],
+        isError: true,
+      };
+    }
+  }
+);
+
+// ============================================
+// LYRIA MUSIC GENERATION (Google Lyria RealTime)
+// ============================================
+
+const genAIMusic = new GoogleGenAI({
+  apiKey: process.env.GOOGLE_AI_API_KEY || '',
+  httpOptions: { apiVersion: 'v1alpha' },
+});
+
+const LYRIA_MODEL = 'models/lyria-realtime-exp';
+
+// Scale name mapping for user-friendly input
+const SCALE_MAP: Record<string, Scale> = {
+  'C': Scale.C_MAJOR_A_MINOR,
+  'C major': Scale.C_MAJOR_A_MINOR,
+  'Db': Scale.D_FLAT_MAJOR_B_FLAT_MINOR,
+  'Db major': Scale.D_FLAT_MAJOR_B_FLAT_MINOR,
+  'D': Scale.D_MAJOR_B_MINOR,
+  'D major': Scale.D_MAJOR_B_MINOR,
+  'Eb': Scale.E_FLAT_MAJOR_C_MINOR,
+  'Eb major': Scale.E_FLAT_MAJOR_C_MINOR,
+  'E': Scale.E_MAJOR_D_FLAT_MINOR,
+  'E major': Scale.E_MAJOR_D_FLAT_MINOR,
+  'F': Scale.F_MAJOR_D_MINOR,
+  'F major': Scale.F_MAJOR_D_MINOR,
+  'Gb': Scale.G_FLAT_MAJOR_E_FLAT_MINOR,
+  'Gb major': Scale.G_FLAT_MAJOR_E_FLAT_MINOR,
+  'G': Scale.G_MAJOR_E_MINOR,
+  'G major': Scale.G_MAJOR_E_MINOR,
+  'Ab': Scale.A_FLAT_MAJOR_F_MINOR,
+  'Ab major': Scale.A_FLAT_MAJOR_F_MINOR,
+  'A': Scale.A_MAJOR_G_FLAT_MINOR,
+  'A major': Scale.A_MAJOR_G_FLAT_MINOR,
+  'Bb': Scale.B_FLAT_MAJOR_G_MINOR,
+  'Bb major': Scale.B_FLAT_MAJOR_G_MINOR,
+  'B': Scale.B_MAJOR_A_FLAT_MINOR,
+  'B major': Scale.B_MAJOR_A_FLAT_MINOR,
+};
+
+function writeWav(samples: Int16Array, filePath: string) {
+  const numChannels = 2;
+  const sampleRate = 48000;
+  const bitsPerSample = 16;
+  const byteRate = sampleRate * numChannels * (bitsPerSample / 8);
+  const blockAlign = numChannels * (bitsPerSample / 8);
+  const dataSize = samples.length * (bitsPerSample / 8);
+  const headerSize = 44;
+
+  const buffer = Buffer.alloc(headerSize + dataSize);
+
+  // RIFF header
+  buffer.write('RIFF', 0);
+  buffer.writeUInt32LE(headerSize - 8 + dataSize, 4);
+  buffer.write('WAVE', 8);
+
+  // fmt chunk
+  buffer.write('fmt ', 12);
+  buffer.writeUInt32LE(16, 16); // chunk size
+  buffer.writeUInt16LE(1, 20);  // PCM format
+  buffer.writeUInt16LE(numChannels, 22);
+  buffer.writeUInt32LE(sampleRate, 24);
+  buffer.writeUInt32LE(byteRate, 28);
+  buffer.writeUInt16LE(blockAlign, 32);
+  buffer.writeUInt16LE(bitsPerSample, 34);
+
+  // data chunk
+  buffer.write('data', 36);
+  buffer.writeUInt32LE(dataSize, 40);
+
+  // Write samples
+  for (let i = 0; i < samples.length; i++) {
+    buffer.writeInt16LE(samples[i], headerSize + i * 2);
+  }
+
+  fs.mkdirSync(path.dirname(filePath), { recursive: true });
+  fs.writeFileSync(filePath, buffer);
+}
+
+server.tool(
+  'gemini_music',
+  'Generate instrumental music using Google Lyria RealTime. Streams audio via WebSocket, saves as WAV file. Free during preview. Instrumental only (no vocals).',
+  {
+    prompts: z.array(z.object({
+      text: z.string().describe('Music description (genre, instruments, mood, style)'),
+      weight: z.number().optional().describe('Influence weight (default: 1.0, higher = more influence)'),
+    })).describe('Array of weighted music prompts'),
+    duration_seconds: z.number().optional().describe('Duration in seconds (default: 30, max: 60)'),
+    bpm: z.number().optional().describe('Beats per minute (60-200)'),
+    density: z.number().optional().describe('Note density 0.0 (sparse) to 1.0 (dense)'),
+    brightness: z.number().optional().describe('Tonal brightness 0.0 (dark) to 1.0 (bright)'),
+    guidance: z.number().optional().describe('Prompt adherence 0.0 (free) to 6.0 (strict). Default: 4.0'),
+    scale: z.string().optional().describe('Musical key: C, D, E, F, G, A, B, Db, Eb, Gb, Ab, Bb'),
+    output_path: z.string().optional().describe('Output WAV path (default: ~/Downloads/lyria-{timestamp}.wav)'),
+  },
+  async (params) => {
+    try {
+      const { prompts, duration_seconds, bpm, density, brightness, guidance, scale, output_path } = params;
+      const duration = Math.min(duration_seconds ?? 30, 60);
+
+      const outputFile = output_path || path.join(
+        os.homedir(), 'Downloads',
+        `lyria-${new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)}.wav`
+      );
+
+      const audioChunks: number[][] = [];
+      let chunkCount = 0;
+
+      const session = await genAIMusic.live.music.connect({
+        model: LYRIA_MODEL,
+        callbacks: {
+          onmessage: (message) => {
+            const chunk = message.audioChunk;
+            if (chunk?.data) {
+              const audioBuffer = Buffer.from(chunk.data, 'base64');
+              const intArray = new Int16Array(
+                audioBuffer.buffer,
+                audioBuffer.byteOffset,
+                audioBuffer.length / Int16Array.BYTES_PER_ELEMENT
+              );
+              audioChunks.push(Array.from(intArray));
+              chunkCount++;
+            }
+          },
+          onerror: (error) => {
+            console.error('Lyria session error:', error);
+          },
+          onclose: () => {
+            console.error('Lyria session closed');
+          },
+        },
+      });
+
+      // Set prompts
+      await session.setWeightedPrompts({
+        weightedPrompts: prompts.map(p => ({
+          text: p.text,
+          weight: p.weight ?? 1.0,
+        })),
+      });
+
+      // Set config
+      const config: Record<string, unknown> = {};
+      if (bpm !== undefined) config.bpm = bpm;
+      if (density !== undefined) config.density = density;
+      if (brightness !== undefined) config.brightness = brightness;
+      if (guidance !== undefined) config.guidance = guidance;
+      if (scale && SCALE_MAP[scale]) config.scale = SCALE_MAP[scale];
+
+      if (Object.keys(config).length > 0) {
+        await session.setMusicGenerationConfig({
+          musicGenerationConfig: config,
+        });
+      }
+
+      // Play and collect audio for the specified duration
+      session.play();
+
+      await new Promise(resolve => setTimeout(resolve, duration * 1000));
+
+      session.close();
+
+      // Wait a moment for any remaining chunks
+      await new Promise(resolve => setTimeout(resolve, 500));
+
+      if (audioChunks.length === 0) {
+        return {
+          content: [{ type: 'text' as const, text: 'No audio received from Lyria. The model may be unavailable or rate-limited.' }],
+          isError: true,
+        };
+      }
+
+      // Combine all chunks and write WAV
+      const allSamples = new Int16Array(audioChunks.flat());
+      writeWav(allSamples, outputFile);
+
+      const durationActual = (allSamples.length / 2 / 48000).toFixed(1); // stereo
+      const fileSizeMB = (fs.statSync(outputFile).size / 1024 / 1024).toFixed(1);
+
+      return {
+        content: [{
+          type: 'text' as const,
+          text: `Music generated successfully!\n\nFile: ${outputFile}\nDuration: ${durationActual}s\nSize: ${fileSizeMB} MB\nFormat: WAV 48kHz 16-bit stereo\nChunks received: ${chunkCount}\n\nPrompts: ${prompts.map(p => `"${p.text}" (weight: ${p.weight ?? 1.0})`).join(', ')}`,
+        }],
+      };
+    } catch (error: unknown) {
+      const err = error as { message: string };
+      return {
+        content: [{ type: 'text' as const, text: `Lyria music error: ${err.message}` }],
         isError: true,
       };
     }
