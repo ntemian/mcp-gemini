@@ -5,10 +5,9 @@
  * Provides Claude Code access to Google Gemini API
  *
  * Models available:
- * - gemini-2.0-flash-exp: Latest experimental (fast, multimodal)
- * - gemini-1.5-pro: Best for complex tasks
- * - gemini-1.5-flash: Fast and efficient
- * - gemini-1.5-flash-8b: Smallest, fastest
+ * - gemini-3.1-pro-preview: Latest flagship (complex reasoning, coding)
+ * - gemini-2.5-flash: Fast and efficient
+ * - gemini-3-pro-preview: Previous gen pro
  */
 
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
@@ -58,7 +57,7 @@ server.tool(
       role: z.enum(['user', 'model']),
       content: z.string(),
     })).describe('Array of messages (role: user or model)'),
-    model: z.string().optional().describe('Model: gemini-2.5-flash (default), gemini-3-pro-preview'),
+    model: z.string().optional().describe('Model: gemini-2.5-flash (default), gemini-3.1-pro-preview, gemini-3-pro-preview'),
     temperature: z.number().optional().describe('Sampling temperature 0-2. Default: 1'),
     max_tokens: z.number().optional().describe('Maximum tokens to generate'),
   },
@@ -142,7 +141,7 @@ server.tool(
 
 server.tool(
   'gemini_pro',
-  'Use Gemini 3 Pro for complex tasks requiring deep reasoning. Latest and best model.',
+  'Use Gemini 3.1 Pro for complex tasks requiring deep reasoning. Latest and best model (released 2026-02-19).',
   {
     prompt: z.string().describe('The prompt'),
     system: z.string().optional().describe('Optional system instruction'),
@@ -152,7 +151,7 @@ server.tool(
     try {
       const { prompt, system, temperature } = params;
       const geminiModel = genAI.getGenerativeModel({
-        model: 'gemini-3-pro-preview',
+        model: 'gemini-3.1-pro-preview',
         systemInstruction: system,
         safetySettings,
         generationConfig: { temperature: temperature ?? 1 },
@@ -225,7 +224,7 @@ server.tool(
       }
 
       const geminiModel = genAI.getGenerativeModel({
-        model: 'gemini-3-pro-preview',
+        model: 'gemini-3.1-pro-preview',
         systemInstruction: systemPrompt,
         safetySettings,
         generationConfig: { temperature: 0.2 },
@@ -264,7 +263,7 @@ server.tool(
       };
 
       const geminiModel = genAI.getGenerativeModel({
-        model: 'gemini-3-pro-preview',
+        model: 'gemini-3.1-pro-preview',
         systemInstruction: 'You are an expert code analyst.',
         safetySettings,
         generationConfig: { temperature: 0.3 },
@@ -307,7 +306,7 @@ server.tool(
       }
 
       const geminiModel = genAI.getGenerativeModel({
-        model: 'gemini-3-pro-preview',
+        model: 'gemini-3.1-pro-preview',
         systemInstruction: 'Think step by step. Show your reasoning process clearly. Break down complex problems into smaller parts.',
         safetySettings,
         generationConfig: { temperature: 0.2 },
@@ -339,37 +338,24 @@ server.tool(
     const models = `
 Gemini Models:
 
-1. gemini-2.0-flash-exp (Recommended)
-   - Latest experimental model
-   - Fast, multimodal (text, images, audio, video)
-   - 1M token context window
-   - Best for: Most tasks, speed + capability
+1. gemini-3.1-pro-preview ★ NEW (2026-02-19)
+   - Latest flagship model
+   - ARC-AGI-2: 77.1%, GPQA Diamond: 94.3%, SWE-Bench: 80.6%
+   - Deep reasoning, complex problem-solving
+   - Best for: Complex tasks, coding, analysis
 
-2. gemini-1.5-pro
-   - Most capable stable model
-   - 2M token context window
-   - Strong reasoning and coding
-   - Best for: Complex tasks, long documents
-
-3. gemini-1.5-flash
+2. gemini-2.5-flash (Default)
    - Fast and efficient
-   - 1M token context window
-   - Good balance of speed/quality
-   - Best for: Quick responses, high volume
+   - Great balance of speed and quality
+   - Best for: Most tasks, quick responses
 
-4. gemini-1.5-flash-8b
-   - Smallest, fastest model
-   - Lower cost
-   - Best for: Simple tasks, cost-sensitive
-
-Pricing (per 1M tokens, 1.5 Pro):
-- Input: $1.25 (≤128K) / $2.50 (>128K)
-- Output: $5.00 (≤128K) / $10.00 (>128K)
+3. gemini-3-pro-preview (Previous gen)
+   - Previous flagship
+   - Still strong for general tasks
 
 Features:
 - Multimodal: Images, video, audio, code
-- Long context: Up to 2M tokens
-- Grounding: Google Search integration (API)
+- Grounding: Google Search integration
 - Code execution: Built-in Python sandbox
 `;
 
@@ -396,7 +382,7 @@ server.tool(
       };
 
       const geminiModel = genAI.getGenerativeModel({
-        model: 'gemini-3-pro-preview',
+        model: 'gemini-3.1-pro-preview',
         safetySettings,
         generationConfig: { temperature: 0.3 },
       });
@@ -434,7 +420,7 @@ server.tool(
         : `Translate the following text to ${target_language}. Only output the translation.\n\nText: ${text}`;
 
       const geminiModel = genAI.getGenerativeModel({
-        model: 'gemini-3-pro-preview',
+        model: 'gemini-3.1-pro-preview',
         safetySettings,
         generationConfig: { temperature: 0.3 },
       });
